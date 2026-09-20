@@ -1,11 +1,14 @@
 import asyncio
+import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, LabeledPrice
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
+from aiohttp import web
 
-BOT_TOKEN = "8832222029:AAE7wZojF8uaN0rWB3iZSAUv1xplk9w8f-k"
+# Беремо токен із прихованих налаштувань
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8832222029:AAHKUeMUaXZ5jBwNnINSqYS9Vuaq02c0LmA")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -17,8 +20,8 @@ class QuestionStates(StatesGroup):
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     args = message.text.split()
-    if len(args) > 1 and args[1].isdigit():
-        target_id = int(args[1])
+    if len(args) > 1 and args.isdigit():
+        target_id = int(args)
         if target_id == message.from_user.id:
             await message.answer("❌ Ви не можете надсилати анонімні питання самому собі.")
             return
@@ -29,7 +32,7 @@ async def cmd_start(message: Message, state: FSMContext):
     bot_info = await bot.get_me()
     share_link = f"https://t.me{bot_info.username}?start={message.from_user.id}"
     welcome_text = (
-        "💬 **Питання — один із найкращих способов зрозуміти, що на думці у твоїх друзів.**\n\n"
+        "💬 **Питання — один із найкращих способів зрозуміти, що на думці у твоїх друзів.**\n\n"
         f"Ось твоє особисте посилання:\n🔗 `{share_link}`\n\n"
         "Розмістіть його в шапці профілю Instagram, TikTok або в Telegram!"
     )
@@ -57,7 +60,7 @@ async def process_question(message: Message, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("ask_reveal_"))
 async def send_invoice_stars(callback_query):
-    msg_id = int(callback_query.data.split("_")[2])
+    msg_id = int(callback_query.data.split("_"))
     if msg_id not in db_questions:
         await callback_query.answer("⚠️ Дані про це питання застаріли.", show_alert=True)
         return
@@ -80,12 +83,12 @@ async def pre_checkout(pre_checkout_query: PreCheckoutQuery):
 @dp.message(F.successful_payment)
 async def success_payment_handler(message: Message):
     payload = message.successful_payment.invoice_payload
-    msg_id = int(payload.split("_")[2])
+    msg_id = int(payload.split("_"))
     author_id = db_questions.get(msg_id)
     if author_id:
         try:
             user_info = await bot.get_chat(author_id)
-            username = f"@{user_info.username}" if user_info.username else "Приховано (немає юзернейму)"
+            username = f"@{user_info.username}" if user_info.username else "Приховано"
             response = (
                 "🎉 **Особу розкрито!**\n\n"
                 f"👤 **Ім'я:** {user_info.full_name}\n"
@@ -98,8 +101,21 @@ async def success_payment_handler(message: Message):
     else:
         await message.answer("❌ Помилка: Автора не знайдено в базі даних.")
 
+# Веб-сервер для обходу обмежень Render Free
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv("PORT", 10000)))
+    await site.start()
+
 async def main():
     print("Бот анонимных вопросов запущен!")
+    await start_web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
