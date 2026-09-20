@@ -7,7 +7,6 @@ from aiogram.fsm.state import StatesGroup, State
 
 # Ваш токен уже вставлено сюди
 BOT_TOKEN = "8832222029:AAE7wZojF8uaN0rWB3iZSAUv1xplk9w8f-k"
-
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
